@@ -2,7 +2,7 @@
 """
 Created on Wed May 11 12:54:05 2022
 
-@author: a072108
+@author: Cyril G.
 """
 import matplotlib.pyplot as plt
 import numpy as np
@@ -91,10 +91,10 @@ def print_value_counts(df,col_list=None,exclude=None):
     col_list : list, optional
         Liste des colonnes à afficher
     """
-    print('Légende :\n')
-    info = applique_style_paragraphe_1(bcolors.OKBLUE+bcolors.BOLD,'Colonne numérique')
+    print('Legend :\n')
+    info = applique_style_paragraphe_1(bcolors.OKBLUE+bcolors.BOLD,'Numerical variable')
     print(info)
-    info = applique_style_paragraphe_1(bcolors.HEADER+bcolors.BOLD,'Colonne catégorielle')
+    info = applique_style_paragraphe_1(bcolors.HEADER+bcolors.BOLD,'Categorical variable')
     print(info)
     print('-'*100)
     if not col_list: 
@@ -134,15 +134,15 @@ def print_nan_rates(nan_rate, seuil_50=None, seuil=None):
     ax.grid(which='major', alpha=1)
     
     # Création du diagramme 
-    nan_rate.plot(kind='barh',rot=0,grid=True,label='taux de NaN')
+    nan_rate.plot(kind='barh',rot=0,grid=True,label='NaN rate')
     # Affichage de l'axe x = 50% 
     if seuil_50:
         plt.axvline(x=50.,color='g',label='50%')
     # Affichage de l'axe x = seuil 
     if seuil:
-        plt.axvline(x=seuil,color='r',label='seuil fixé')
+        plt.axvline(x=seuil,color='r',label='fixed threshold')
     plt.legend(loc='lower right')
-    plt.title(f'Taux de NaN par colonne');
+    plt.title(f'NaN rate per column');
 
 
 def display_external_images(images_list, axis=False):
@@ -224,7 +224,7 @@ def order_df_values(df, col, seuil=0.75, max_bar=50, kind='barh'):
     return vp, cles, flag_seuil, flag_max_bar
 
 
-def trace_tuyaux_principaux(df, col, seuil=0.75, max_bar=50, kind='barh', rot=0, show_nan=True, xtrot=90):
+def plot_categ_bars(df, col, seuil=0.75, max_bar=50, kind='barh', rot=0, show_nan=True, xtrot=90):
     """Tracé de diagramme en tuyaux d'orgue montrant les fréquences d'une variable catégorielle, par ordre décroissant.
 
     Parameters
@@ -262,11 +262,11 @@ def trace_tuyaux_principaux(df, col, seuil=0.75, max_bar=50, kind='barh', rot=0,
     vp.plot(kind=kind,rot=rot)
     plt.grid('on')
     if flag_seuil:
-        titre = f'{col} : catégories principales représentant {seuil*100.}% des valeurs'
+        titre = f'{col} : principal categories, cumulating {seuil*100.}% of the total'
     elif flag_max_bar:
-        titre = f'{col} : catégories principales ({max_bar} premières)'
+        titre = f'{col} : principal categories ({max_bar} first)'
     else:
-        titre = f'{col} : catégories'
+        titre = f'{col} : categories'
     if show_nan:
         titre += f' - NaN : {nan_rate:.2f}%'
     plt.title(titre)
@@ -305,7 +305,7 @@ def plot_distrib(df, num_cols, nbins=50, facecolor='orange', exclude=None):
         n, bins, patches = plt.hist(vals, nbins, density=False, facecolor=facecolor, alpha=0.75) #'c'
         plt.xlabel(f'{var}')
         plt.ylabel('n')
-        plt.title(f'Histogramme de {var}')
+        plt.title(f'Histogram of {var}')
         plt.grid(True)
         plt.show()
 
@@ -349,7 +349,7 @@ def compare_2df_distrib_num(df1, df2, num_cols, label1='Inliers', label2='Outlie
         df = pd.concat([df1b,df2b],axis=0)
         print(f"df : {df}")
         if df.empty:
-            print(bcolors.BOLD+bcolors.HEADER+"Aucun outlier !"+bcolors.ENDC)
+            print(bcolors.BOLD+bcolors.HEADER+"No outlier !"+bcolors.ENDC)
         else:
             sns.boxplot(data=df, x=cat, y='DF', palette={label1: "mediumslateblue", label2: "red"}, 
                         showmeans=True, showfliers=False) # 'gist_rainbow_r', width=0.8, notch=True, palette='coolwarm'

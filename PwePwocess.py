@@ -2,7 +2,7 @@
 """
 Created on Thu May 12 12:08:03 2022
 
-@author: a072108
+@author: Cyril G.
 """
 
 import numpy as np
@@ -28,11 +28,6 @@ def influenceCatVal(featValues,importance, sep='_'):
         else:
             influenceCateg[cat] += np.abs(imp)
 
-    # influenceVals = [ [k,v] for k,v in influenceCateg.items() ]
-    influenceVals = influenceCateg
-    # influenceVals = influenceCateg.sort(key=lambda x: x[1],reverse=True)
-    # influenceVals = influenceCateg.sort(key=lambda x: x.value(),reverse=True)
-    # influenceVals = dict(sorted(influenceCateg.items(), key=lambda item: item[1], reverse=True))
     influenceVals = dict(sorted(influenceCateg.items(), key=lambda item: item[1]))
     return influenceVals
 

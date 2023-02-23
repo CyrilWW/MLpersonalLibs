@@ -104,45 +104,38 @@ def make_preprocessor_X(#  X,
     """
     Encodage des colonnes catégorielles et mise à l'échelle des colonnes numériques
     """
-    print(categ_encoder)
     # Numerical pipeline
-    # if imputer:
-    #     print('OK, on passe ici, imputer')
-    #     steps_num = [("imputer", imputer(**imputer_params))]
-    # else:
-    #     steps_num = []
-    steps_num = [("imputer", SimpleImputer(missing_values=np.nan, strategy="mean"))] # strategy="median"
+    if imputer:
+        # steps_num = [("imputer", imputer(**imputer_params))] # TODO
+        steps_num = [("imputer", SimpleImputer(missing_values=np.nan, strategy="mean"))] # strategy="median"
+    else:
+        steps_num = []
     steps_num.append(("scaler", scaler()))
     numeric_transformer = Pipeline(
         steps=steps_num 
     )
-    # print(f"preprocess_X: steps_num = {steps_num}")
 
     # Categorical pipeline
     steps_cat = []
     if categ_encoder:
-        steps_cat.append(("categorical", categ_encoder(), categ_cols))
+        steps_cat.append(("categorical", categ_encoder, categ_cols))
 
     steps_all = [("numerical", numeric_transformer, num_cols)]
     if categ_encoder:
-        steps_all.append(steps_cat)
+        steps_all.extend(steps_cat)
 
     preprocessor = ColumnTransformer(
         steps_all,
         verbose_feature_names_out=False,
     )
-    # print(f"preprocess_X: preprocessor = {preprocessor}")
-    # preprocessor.fit(X)
-    # X_enc = preprocessor.transform(X)
-    # return X_enc, preprocessor
     return preprocessor
 
-def preprocess_y(y,encode_y):
+def preprocess_y(y, encode_y):
     """Encodage de la colonne à imputer/régresser/classifier"""
     if encode_y:
         encoder = LabelEncoder()
         encoder.fit(y)
-        y_enc = encoder.transform(y)
+        y_enc = pd.DataFrame(encoder.transform(y))
     else:
         encoder = None
         y_enc = y.copy()    
@@ -150,19 +143,11 @@ def preprocess_y(y,encode_y):
 
 def data_augmentation_mult(X_train, y_train, data_augm):
     if data_augm:
-        print(f"AVANT:{X_train.shape}")
-        print(f"AVANT:{y_train.shape}")
-        X_train_0 = X_train.copy()
-        y_train_0 = y_train.copy().reshape(y_train.shape[0],1)
-        for _ in range(data_augm):
-            X_train = np.vstack((X_train, X_train_0))
-            y_train = np.vstack((y_train.reshape(y_train.shape[0],1), y_train_0))
-        y_train = y_train.ravel()
-        print(f"APRES:{X_train.shape}")
-        print(f"APRES:{y_train.shape}")
+        # TODO
+        pass
     return X_train, y_train
 
-def initialize_model(n_num_cols, scoring=None):
+def initialize_keras_model(n_num_cols, scoring=None):
     # Documentation de la bibliothèque Keras: https://keras.io/guides/sequential_model/
     model = models.Sequential()
     # On indique à notre modèle la dimension des données d'entrées qui correspond au nombre de colonnes de X_train
@@ -176,6 +161,11 @@ def initialize_model(n_num_cols, scoring=None):
     if not scoring: scoring = 'mean_squared_error'
     model.compile(loss=scoring,
                   optimizer='adam')
+    return model
+
+
+def initialize_pytorch_model(X, y):
+
     return model
 
 def rename_keys_with_prefix_suffix(dico, prefix='', suffix=''):
@@ -212,7 +202,7 @@ def launch_algo(X_train, y_train, X_test, y_test,
     else :
         main_score = scores[0]
 
-    ch = f"\nAlgorithme {algo_surname} :\n{'-'*(len(algo_surname)+13)}\n"
+    ch = f"\nAlgorithm {algo_surname} :\n{'-'*(len(algo_surname)+12)}\n"
     print(bcolors.BOLD+bcolors.OKBLUE+ch+bcolors.ENDC)
     now = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
     ch = now + '\n' + ch
@@ -222,7 +212,6 @@ def launch_algo(X_train, y_train, X_test, y_test,
     start_time = timeit.default_timer()
 
     steps = []
-
     # Encodage des colonnes catégorielles et mise à l'échelle des colonnes numériques
     preprocessor_X = make_preprocessor_X(#X_train, 
                                          categ_cols, num_cols, 
@@ -230,15 +219,13 @@ def launch_algo(X_train, y_train, X_test, y_test,
                                          scaler=scaler)
     steps.append(('preprocessor', preprocessor_X))
 
-    # X_train_enc = preprocessor_X.fit_transform(X_train)
-
     # Encodage de la colonne à régresser
     y_train_enc, encoder_y = preprocess_y(y_train, encode_y)
 
     # Partie test
     # X_test_enc = preprocessor_X.transform(X_test)
     if encode_y:
-        y_test_enc = encoder_y(y_test)
+        y_test_enc = encoder_y.transform(y_test)
     else:
         y_test_enc = y_test
     X_train_orig = X_train
@@ -246,10 +233,8 @@ def launch_algo(X_train, y_train, X_test, y_test,
 
     # Over et under sampling pipeline
     if oversampling:
-        #     steps.append(('over', SMOTENC(categorical_features=non_relaxable_cols_ind, sampling_strategy=0.55, 
-        #                                   k_neighbors=3, random_state=18011975, n_jobs=-1)))
         if oversampling == 'SMOTE':
-            steps.append(('over', SMOTE(sampling_strategy=0.48, random_state=18011975)))
+            steps.append(('over', SMOTE(sampling_strategy='auto', random_state=18011975, k_neighbors=1))) # sampling_strategy=0.48
         elif oversampling == 'SMOTE-NC':
             non_relaxable_cols_ind = [n for n, col in enumerate(X_train_orig.columns) if '_NR' in col]
             print(f"non_relaxable_cols = {non_relaxable_cols_ind}")
@@ -268,7 +253,7 @@ def launch_algo(X_train, y_train, X_test, y_test,
         steps.append(('under', RandomUnderSampler(sampling_strategy='auto', random_state=18011975)))
 
     # DEBUG
-    print(f"y_train.value_counts() = {y_train.value_counts()}")
+    if problem_kind=='classification': print(f"y_train.value_counts() = \n{y_train.value_counts()}")
     if oversampling or undersampling:
         temp_pipeline = imbPipeline(steps=steps)
         print("Resampling dataset...")
@@ -283,46 +268,48 @@ def launch_algo(X_train, y_train, X_test, y_test,
     # Fabrication du pipeline 
     if oversampling or undersampling:
         if oversampling and undersampling:
-            print('+++ AVEC oversampling ET undersampling')
+            print('+++ WITH oversampling AND undersampling')
         elif oversampling and not undersampling:
-            print('+++ AVEC oversampling seulement')
+            print('+++ WITH oversampling only')
         elif not oversampling and undersampling:
-            print('+++ AVEC undersampling seulement')
+            print('+++ WITH undersampling only')
         pipeline = imbPipeline(steps=steps)
     else:
-        print('--- SANS over/undersampling')
+        print('--- WITHOUT over/undersampling')
         pipeline = Pipeline(steps=steps)
 
     # KFold
-    stratified_kfold = StratifiedKFold(n_splits=5,
-                                       shuffle=True,
-                                       random_state=18011975)
+    if problem_kind=='regression':
+        cv = 5
+    else:
+        cv = StratifiedKFold(n_splits=5,
+                             shuffle=True,
+                             random_state=18011975)
 
     # On renomme les clés de param_grid pour les associer au classifieur
     param_grid2 = rename_keys_with_prefix_suffix(param_grid, prefix='model__')
 
-    # print(f"main_score = {main_score}")
-
     # Prédicteur avec recherche d'hyperparamètres par validation croisée
-    if algo_surname=='NeuralNetwork':
+    if algo_surname=='KerasMLP':
         n_num_cols = X_train.shape[1]
-        mdl = initialize_model(n_num_cols, scoring=None)
+        mdl = initialize_keras_model(n_num_cols, scoring=None)
     else:
         mdl = GridSearchCV(
             pipeline,
             param_grid=param_grid2,
-            cv=stratified_kfold,
-            scoring=main_score,  # score à optimiser
+            cv=cv,
+            scoring=main_score,
             n_jobs=-1
         )
 
     # Entraînement de l'algorithme optimal sur ses hyperparamètres sur le jeu d'entraînement
-    if algo_surname=='NeuralNetwork':
+    y_train_enc = y_train_enc.values.reshape(-1, 1) # Pour PyTorch
+    if algo_surname=='KerasMLP':
         epochs = 5 # 100
         batch_size = 4
-        mdl.fit(X_train, y_train, epochs=epochs, batch_size=batch_size)
+        mdl.fit(X_train, y_train_enc, epochs=epochs, batch_size=batch_size)
     else:
-        mdl.fit(X_train, y_train)
+        mdl.fit(X_train, y_train_enc)
 
     # Régression sur le train set
     if problem_kind=='regression':
@@ -338,7 +325,6 @@ def launch_algo(X_train, y_train, X_test, y_test,
     else:
         y_train_pred = y_train_pred_enc
         y_train_index = y_train.index
-    print(f"y_train_pred = {y_train_pred}")
     y_train_pred = pd.DataFrame(y_train_pred,columns=[target_col+'_pred'],index=y_train_index)
 
     # Régression sur le test set
@@ -356,7 +342,6 @@ def launch_algo(X_train, y_train, X_test, y_test,
         y_test_pred = y_test_pred_enc
         y_test_index = y_test.index
     y_test_pred = pd.DataFrame(y_test_pred,columns=[target_col+'_pred'],index=y_test_index)
-    print(f"y_test_pred = {y_test_pred}")
 
     # Fin du chrono
     etime = timeit.default_timer() - start_time
@@ -388,7 +373,6 @@ def launch_algo(X_train, y_train, X_test, y_test,
                 p = X_train.shape[1]
                 algo_res['Test adj '+score] = 1. - (n-1.)/(n-p-1.)*(1. - s)
     else: # Classification
-        # print(f"custom_score = {custom_score}")
         if not custom_score is None:
             score_function = custom_score
             score_str = 'custom_score'
@@ -404,8 +388,6 @@ def launch_algo(X_train, y_train, X_test, y_test,
                 score_str = score
             else:
                 score_str = 'custom_score'
-            print(f"score = {score}") # DEBUG
-            print(f"score_str = {score_str}") # DEBUG
             algo_res['Train '+score_str] = compute_classif_score(X_train, X_train_orig, y_train, y_train_pred, target_col, mdl, score, score_str, score_function,
                                                                  predict_proba, class_to_predict, threshold=threshold, alpha=alpha)
             algo_res['Test '+score_str] = compute_classif_score(X_test, X_test_orig, y_test, y_test_pred, target_col, mdl, score, score_str, score_function,
@@ -422,16 +404,11 @@ def launch_algo(X_train, y_train, X_test, y_test,
     algo_res['encoder_y'] = encoder_y
     algo_res['etime'] = etime
 
-    if len(categ_cols):
-        feature_names_out = preprocessor_X.get_feature_names_out()
-    else:
-        feature_names_out = categ_cols
-
     # Affichage des résultats numériques
     DisplotML.display_cv_results(problem_kind, mdl, main_score, display_results_text,
                                  algo_surname)
     
-    return mdl, algo_res, feature_names_out
+    return mdl, algo_res, preprocessor_X, encoder_y
 
 
 def compute_classif_score(X_sc, X_orig, y_true, y_pred, target_col, mdl, score, score_str, score_function,
@@ -474,7 +451,6 @@ def compute_abs_and_rel_score(score,y_truth,y_pred):
     score_function = get_scorer(score)
     # Train
     s = score_function._score_func(y_truth, y_pred)
-    # r = score_function._score_func(y_truth_rel, y_pred_rel)
     if score.endswith('_mean_squared_error'):
         s = sqrt(abs(s))
         r = s / sqrt(abs(score_function._score_func(y_truth, zero_truth))*n)
@@ -488,7 +464,7 @@ def regression_doe(df0, df_doe0,
                    problem_kind,
                    scores,
                    encode_y=True):
-    print(f"Taille du dataset de régression  : {df0.shape}")
+    print(f"Size of the regression train set : {df0.shape}")
     algos_results = []
     score_new  = -np.inf
     score_best = -np.inf
@@ -509,11 +485,14 @@ def regression_doe(df0, df_doe0,
         # Ensemble des colonnes formant les features
         feat_cols = categ_cols + num_cols
         
-        print(f"Variables explicatives           : {feat_cols}")
+        print(f"Explanatory variables            : {feat_cols}")
 
         # Création des matrices et vecteurs de travail 
         X = df0[feat_cols].copy()
-        y = df0[target_col].copy()
+        y = df0[[target_col]].copy()
+
+        X[num_cols] = X[num_cols].astype('float32') # for PyTorch
+        y = y.astype('float32')
 
         # Split train/test
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=18011975) # , stratify=y_enc
@@ -526,13 +505,12 @@ def regression_doe(df0, df_doe0,
                     inds.append(ig)
             X_train.drop(inds,inplace=True)
             y_train.drop(inds,inplace=True)
-            print(f"Elimination de {len(ignored_indices_train)} samples de l'entrainement !")
-        print(f"Taille du dataset d'entrainement : {X_train.shape}")
+            print(f"Elimination of {len(ignored_indices_train)} samples from the train set !")
+        print(f"Size of the train set : {X_train.shape}")
         
-        # *** ICI fut la phase de preprocess_X et preprocess_y ***
 
         # Lance l'algo et renvoie le meilleur pour le score principal spécifié en première position
-        mdl, algo_res, feature_names_out = \
+        mdl, algo_res, preprocessor_X, encoder_y = \
             launch_algo(X_train, y_train, X_test, y_test, 
                         categ_cols, num_cols, target_col,
                         algo_info, scores, problem_kind,
@@ -555,16 +533,16 @@ def regression_doe(df0, df_doe0,
         y_test = pd.DataFrame(y_test,columns=[target_col])
 
         # Mémorisation des résultats dans la structure algo_results
+        preprocessor_X.fit(X_train)
         algo_res['Column names'] = preprocessor_X.get_feature_names_out()
         algo_res['X_train'] = X_train
-        algo_res['X_train_enc'] = X_train_enc
+        # algo_res['X_train_enc'] = X_train_enc
         algo_res['y_train'] = y_train
         algo_res['X_test'] = X_test
-        algo_res['X_test_enc'] = X_test_enc
+        # algo_res['X_test_enc'] = X_test_enc
         algo_res['y_test'] = y_test
         algos_results.append(algo_res)
 
-        print(f"{4}: {ind}")
         # Mémorisation des résultats dans le dataframe du DOE
         print(mdl.best_params_)
         df_doe.loc[ind,'Best params'] = f"{mdl.best_params_}"
@@ -584,11 +562,11 @@ def regression_doe(df0, df_doe0,
 
     # Affichages
     if scores[0].startswith('neg_'): score_best = -score_best
-    print(bcolors.BOLD+bcolors.OKGREEN+f"\nEt le César du meilleur algorithme est attribué à : "+bcolors.ENDC + best_mdl_name + \
-          bcolors.BOLD+bcolors.OKGREEN+f"\npour son rôle dans                                : "+bcolors.ENDC + f"{best_mdl}" + \
-          bcolors.BOLD+bcolors.OKGREEN+f"\net sa performance (absolue) de validation         : "+bcolors.ENDC + f"{score_best:.3e}")
+    print(bcolors.BOLD+bcolors.OKGREEN+f"\nAnd the Oscar for the best algorithm is awarded to: "+bcolors.ENDC + best_mdl_name + \
+          bcolors.BOLD+bcolors.OKGREEN+f"\nfor his role in                                   : "+bcolors.ENDC + f"{best_mdl}" + \
+          bcolors.BOLD+bcolors.OKGREEN+f"\nand its (absolute) validation performance of      : "+bcolors.ENDC + f"{score_best:.3e}")
     s = algo_res['Test relative '+scores[0]]
-    print(bcolors.BOLD+bcolors.HEADER +f"\nSa performance (relative) sur le test set est de  : "+bcolors.ENDC + f"{s:.3e} ({scores[0]})")
+    print(bcolors.BOLD+bcolors.HEADER +f"\nIts (relative) performance on the test set        : "+bcolors.ENDC + f"{s:.3e} ({scores[0]})")
 
     return df_doe, algos_results, s, best_mdl, best_mdl_name
 
@@ -609,7 +587,7 @@ def classification_doe(df0, df_doe0,
      - [X] initialisations : mieux gérées
 
     """
-    print(f"Taille du dataset de classification  : {df0.shape}")
+    print(f"Size of the classification train set : {df0.shape}")
     algos_results = []
     score_new  = -np.inf
     score_best = -np.inf
@@ -627,7 +605,7 @@ def classification_doe(df0, df_doe0,
         categ_encoder = problem['Encoder']
         scaler        = problem['Scaler']
         if 'Imputer' in problem :
-            imputer       = problem['Imputer']
+            imputer   = problem['Imputer']
         else:
             imputer = None
         algo_info     = problem['Algorithm']
@@ -641,9 +619,6 @@ def classification_doe(df0, df_doe0,
             greater_is_better = score_data['greater_is_better']
             needs_proba = score_data['needs_proba']
             score_params = score_data['score_params']
-            # print(f"greater_is_better = {greater_is_better}")
-            # print(f"needs_proba = {needs_proba}")
-            # print(f"score_params = {score_params}")
             threshold = score_params['threshold']
             alpha = score_params['alpha']
             if score_function == 'roc_auc':
@@ -656,14 +631,10 @@ def classification_doe(df0, df_doe0,
             threshold = 0.5
             alpha = None
         algo_surname  = algo_info['surname']
-        # print(f"param_grid = {algo_info['param_grid']}")
-
 
         # Ensemble des colonnes formant les features
         feat_cols = categ_cols + num_cols
         
-        # print(f"Variables explicatives           : {feat_cols}")
-
         # Création des matrices et vecteurs de travail 
         X = df0[feat_cols].copy()
         y = df0[target_col].copy()
@@ -679,29 +650,11 @@ def classification_doe(df0, df_doe0,
                     inds.append(ig)
             X_train.drop(inds,inplace=True)
             y_train.drop(inds,inplace=True)
-            print(f"Elimination de {len(ignored_indices_train)} samples de l'entrainement !")
-        print(f"Taille du dataset d'entrainement : {X_train.shape}")
+            print(f"Elimination of {len(ignored_indices_train)} samples from the train set !")
+        print(f"Size of the train set : {X_train.shape}")
         
-        # *** ICI fut la phase de preprocess_X et preprocess_y ***
-        # # Encodage des colonnes catégorielles et mise à l'échelle des colonnes numériques
-        # X_train_enc, preprocessor_X = preprocess_X(X_train, categ_cols, categ_encoder, num_cols, scaler, imputer)
-        # print(f"X = {X_train_enc}")
-        # print(f"X.sum.sum = {X_train_enc.sum().sum()}")
-        # print(f"y = {y_train}")
-
-        # # Encodage de la colonne à régresser
-        # y_train_enc, encoder_y = preprocess_y(y_train,encode_y)
-
-        # # Partie test
-        # X_test_enc = preprocessor_X.transform(X_test)
-        # if encode_y:
-        #     y_test_enc = encoder_y(y_test)
-        # else:
-        #     y_test_enc = y_test
-
-
         # Lance l'algo et renvoie le meilleur pour le score principal spécifié en première position
-        mdl, algo_res, feature_names_out = \
+        mdl, algo_res, preprocessor_X, encoder_y = \
             launch_algo(X_train, y_train, X_test, y_test, 
                         categ_cols, num_cols, target_col,
                         algo_info, scores, problem_kind,
@@ -735,7 +688,6 @@ def classification_doe(df0, df_doe0,
         algo_res['y_test'] = y_test
         algos_results.append(algo_res)
 
-        print(f"{4}: {ind}")
         # Mémorisation des résultats dans le dataframe du DOE
         print(mdl.best_params_)
         df_doe.loc[ind,'Best params'] = f"{mdl.best_params_}"
@@ -774,12 +726,12 @@ def classification_doe(df0, df_doe0,
         score_str = 'custom_score'
 
     if score_str.startswith('neg_'): score_best = -score_best
-    print(bcolors.BOLD+bcolors.OKGREEN+f"\nEt le César du meilleur algorithme est attribué à : "+bcolors.ENDC + best_mdl_name + \
-          bcolors.BOLD+bcolors.OKGREEN+f"\npour son rôle dans                                : "+bcolors.ENDC + f"{best_mdl}" + \
-          bcolors.BOLD+bcolors.OKGREEN+f"\net sa performance (absolue) de validation         : "+bcolors.ENDC + f"{score_best:.3e}")
+    print(bcolors.BOLD+bcolors.OKGREEN+f"\nAnd the Oscar for the best algorithm is awarded to: "+bcolors.ENDC + best_mdl_name + \
+          bcolors.BOLD+bcolors.OKGREEN+f"\nfor his role in                                   : "+bcolors.ENDC + f"{best_mdl}" + \
+          bcolors.BOLD+bcolors.OKGREEN+f"\nand its (absolute) validation performance of      : "+bcolors.ENDC + f"{score_best:.3e}")
     if problem_kind=='regression':
         s = algo_res['Test relative '+score_str]
-        print(bcolors.BOLD+bcolors.HEADER +f"\nSa performance (relative) sur le test set est de  : "+bcolors.ENDC + f"{s:.3e} ({score_str})")
+        print(bcolors.BOLD+bcolors.HEADER +f"\nIts (relative) performance on the test set        : "+bcolors.ENDC + f"{s:.3e} ({score_str})")
 
     return df_doe, algos_results, s, best_mdl, best_mdl_name
 
@@ -801,7 +753,7 @@ def impute_df_with_study(df0, df_doe0,
     On peut exclure des valeurs d'entraînement et donc d'imputation avec l'argument optionnel excluded_imp_vals.
     On suppose que le dataframe n'a pas d'autres NaN que ceux de la colonne à imputer.
     """
-    print(f"Taille du dataset : {df0.shape}")
+    print(f"Size of the dataset : {df0.shape}")
 
     algos_results = []
     score_new  = -np.inf
@@ -829,37 +781,37 @@ def impute_df_with_study(df0, df_doe0,
 
         # Split train/test : A FAIRE AVANT les transformations, idéalement
         df_known, df_unknown = separate_df_known_unknown(df_work,imput_col)
-        print(f"Taille du dataset exclu de l'imputation        : {df_excl.shape}")
-        print(f"Taille du dataset de travail pour l'imputation : {df_known.shape}")
-        print(f"Taille du dataset cible de l'imputation        : {df_unknown.shape}")
+        print(f"Size of the dataset excluded from imputation     : {df_excl.shape}")
+        print(f"Size of the working dataset for the imputation   : {df_known.shape}")
+        print(f"Size of the target dataset for the imputation    : {df_unknown.shape}")
         
         # On travaille désormais dans la partie connue
         X = df_known[feat_cols].copy()
         y = df_known[imput_col].copy()
 
-        # Encodage des colonnes catégorielles et mise à l'échelle des colonnes numériques
-        # X_enc, preprocessor_X = preprocess_X(X, categ_cols, categ_encoder, num_cols, scaler, imputer=None)
-        preprocessor_X = make_preprocessor_X(categ_cols, num_cols, 
-                                             categ_encoder=categ_encoder,
-                                             scaler=scaler, imputer=None)
-        X_enc = preprocessor_X.fit_transform(X)
-
-        # Encodage de la colonne à imputer
-        y_enc, encoder_y = preprocess_y(y,encode_y)
-
-        # Split train/test : A FAIRE AVANT les transformations, idéalement
-        X_train, X_test, y_train, y_test = train_test_split(X_enc, y_enc, test_size=0.2, random_state=3) #18011975 , stratify=y_enc
+        # Split train/test
+        # X_train, X_test, y_train, y_test = train_test_split(X_enc, y_enc, test_size=0.2, random_state=3) #18011975 , stratify=y_enc
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=3) #18011975 , stratify=y_enc
 
         # Augmentation de données
-        X_train, y_train = data_augmentation_mult(X_train, y_train, data_augm)
+        # X_train, y_train = data_augmentation_mult(X_train, y_train, data_augm)
+        if data_augm:
+            oversampling = 'SMOTE'
+        else:
+            oversampling = False
+
+        print(f"problem_kind = {problem_kind}")
 
         # Lance les algos renvoie le meilleur pour le score spécifié
-        mdl, algo_res, feature_names_out = \
+        mdl, algo_res, preprocessor_X, encoder_y = \
             launch_algo(X_train, y_train, X_test, y_test,
                         categ_cols, num_cols, imput_col, 
                         algo_info, scores, problem_kind,
                         categ_encoder=categ_encoder,
                         scaler=scaler,
+                        oversampling=oversampling,
+                        predict_proba=False,
+                        encode_y=encode_y,
                         display_results_text=2)
         score_new = algo_res['Validation score']
     
@@ -872,16 +824,14 @@ def impute_df_with_study(df0, df_doe0,
         pass
 
     # Affichages
-    print(bcolors.BOLD+bcolors.OKGREEN+f"\nEt le César du meilleur algorithme est attribué à : "+bcolors.ENDC + best_mdl_name + \
-          bcolors.BOLD+bcolors.OKGREEN+f"\npour son rôle dans                                : "+bcolors.ENDC + f"{best_mdl}" + \
-          bcolors.BOLD+bcolors.OKGREEN+f"\net sa performance de                              : "+bcolors.ENDC + f"{score_best:.3e}")
+    print(bcolors.BOLD+bcolors.OKGREEN+f"\nAnd the Oscar for the best algorithm is awarded to: "+bcolors.ENDC + best_mdl_name + \
+          bcolors.BOLD+bcolors.OKGREEN+f"\nfor his role in                                   : "+bcolors.ENDC + f"{best_mdl}" + \
+          bcolors.BOLD+bcolors.OKGREEN+f"\nand its (absolute) validation performance of      : "+bcolors.ENDC + f"{score_best:.3e}")
 
     # Imputation finale
     X_imp = df_unknown[feat_cols].copy()
-    print(X_imp.shape)
-    X_imp_enc = preprocessor_X.transform(X_imp)
 
-    y_pred_enc = best_mdl.predict(X_imp_enc)
+    y_pred_enc = best_mdl.predict(X_imp)
     if encode_y:
         y_pred = encoder_y.inverse_transform(y_pred_enc)
     else:
@@ -900,8 +850,8 @@ def impute_df_with_study(df0, df_doe0,
 
     # On rajoute la partie exclue de l'entraînement
     df = pd.concat([df_excl,df_known,df_unknown],axis=0)
-    print(f"Taille du dataset avant imputation : {df0.shape}")
-    print(f"Taille du dataset après imputation : {df.shape}")
+    print(f"Size of the dataset before imputation : {df0.shape}")
+    print(f"Size of the dataset after imputation  : {df.shape}")
     
     return df, best_mdl, best_mdl_name, algos_results
 
@@ -910,9 +860,6 @@ def get_n_worst_predictions(n, y_true, y_pred, criteria='neg_mean_absolute_error
     score_function = get_scorer(criteria)
     sc = []
     for ind in range(y_true.shape[0]):
-        # print(y_true.index[ind])
-        # print(y_true.iloc[ind])
-        # print(y_pred.iloc[ind])
         sc.append([y_true.index[ind], score_function._score_func(y_true.iloc[ind], y_pred.iloc[ind])])
     
     sc = np.array(sc)
@@ -940,7 +887,6 @@ def make_litte_PCA_for_display(X_train, X_test, num_cols):
     pca = PCA(n_components=n_comp)
     pca.fit(X_train_pca_scaled)
     
-#     pcs = pca.components_
     X_train_pca_proj = pca.transform(X_train_pca_scaled)
     X_test_pca_proj  = pca.transform(X_test_pca_scaled)
 
@@ -976,7 +922,6 @@ def reduce_categ_numeric_info(df0,categ_cols,num_cols,prefix=None):
     M = np.zeros((m, n))
     
     # Boucle sur les samples
-#     for ind in range(m):
     ind = -1
     for index in df.index:
         ind += 1
@@ -1054,6 +999,9 @@ def result_table_filter_algo(df_doe0, excluded_vals, check_class=False):
 
 
 def result_table_top_N(df_doe0, score, N):
+    """
+    Création d'un top N des résiultats d'algorithmes.
+    """
     df_doe = df_doe0.sort_values(by=score,ascending=False)
     df_doe = df_doe.iloc[0:N]
 

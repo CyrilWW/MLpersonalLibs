@@ -2,7 +2,7 @@
 """
 Created on 2022/06/07
 
-@author: a072108
+@author: Cyril G.
 """
 import matplotlib.pyplot as plt
 import numpy as np
@@ -60,7 +60,7 @@ def display_cv_results(problem_kind, clf, score, display_results_text=0,
             b = clf.best_params_
         if problem_kind=='regression': s = -s # TODO allez hop
 
-        print(bcolors.BOLD+f"Meilleurs hyperparamètres sur le jeu d'entraînement : {b}. " + \
+        print(bcolors.BOLD+f"Best hyperparameters on the train set: {b}. " + \
               f"Score (val) : {s:.3e}"+bcolors.ENDC)
 
     if display_results_text>1 and algo_surname!='NeuralNetwork':
@@ -179,12 +179,13 @@ def display_circles(pcs, n_comp, pca, axis_ranks, labels=None, label_rotation=0,
             plt.xlabel('F{} ({}%)'.format(d1+1, round(100*pca.explained_variance_ratio_[d1],1)))
             plt.ylabel('F{} ({}%)'.format(d2+1, round(100*pca.explained_variance_ratio_[d2],1)))
 
-            plt.title(title_prefix+"Cercle des corrélations (F{} et F{})".format(d1+1, d2+1)+title_suffix)
+            plt.title(title_prefix+"Correlation circle (F{}, F{})".format(d1+1, d2+1)+title_suffix)
             plt.show(block=False)
 
 
 def display_factorial_planes(X_projected, n_comp, pca, axis_ranks, labels=None, alpha=1, illustrative_var=None,
-                            marker='o', s=72, xlim=None, ylim=None,
+                            marker='o', markerscale=None,
+                            s=72, xlim=None, ylim=None,
                             title_prefix='', title_suffix=''):
     """Affiche la projection des individus dans les plans principaux d'une PCA.
     
@@ -239,7 +240,7 @@ def display_factorial_planes(X_projected, n_comp, pca, axis_ranks, labels=None, 
             if labels is not None:
                 for i,(x,y) in enumerate(X_projected[:,[d1,d2]]):
                     plt.text(x, y, labels[i],
-                              fontsize='10', ha='center',va='center') 
+                              fontsize='10', ha='center', va='center') 
                 
             # détermination des limites du graphique
             boundary = np.max(np.abs(X_projected[:, [d1,d2]])) * 1.1
@@ -261,10 +262,12 @@ def display_factorial_planes(X_projected, n_comp, pca, axis_ranks, labels=None, 
             plt.xlabel('F{} ({}%)'.format(d1+1, round(100*pca.explained_variance_ratio_[d1],1)))
             plt.ylabel('F{} ({}%)'.format(d2+1, round(100*pca.explained_variance_ratio_[d2],1)))
 
-            plt.title(title_prefix+"Projection des individus (sur F{} et F{})".format(d1+1, d2+1)+title_suffix)
+            plt.title(title_prefix+"Sample projection on (F{}, F{})".format(d1+1, d2+1)+title_suffix)
             if not illustrative_var is None:
-                # plt.legend(markerscale=8,prop={'size': 15})
-                plt.legend(prop={'size': 15})
+                if markerscale is not None:
+                    plt.legend(prop={'size': 15}, markerscale=markerscale)
+                else:
+                    plt.legend(prop={'size': 15})
             
             plt.show(block=False)
 
@@ -274,10 +277,11 @@ def display_scree_plot(pca, title_prefix='', title_suffix=''):
     fig = plt.figure() 
     plt.bar(np.arange(len(scree))+1, scree)
     plt.plot(np.arange(len(scree))+1, scree.cumsum(),c="red",marker='o')
-    plt.xlabel("Rang de l'axe d'inertie")
-    plt.ylabel("Pourcentage d'inertie")
-    plt.title(title_prefix+"Eboulis des valeurs propres"+title_suffix)
+    plt.xlabel("Component")
+    plt.ylabel("Inertia percentage")
+    plt.title(title_prefix+"Eigenvalue scree plot"+title_suffix)
     plt.show(block=False)
+
 
 def plot_dendrogram(Z, names):
     """Affiche le dendrogramme d'un clustering hiérarchique."""
